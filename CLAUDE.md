@@ -15,7 +15,7 @@ LawyerGPT is a **RAG-based (Retrieval-Augmented Generation) legal chatbot** that
 │         (ChatGPT-inspired layout with streaming)            │
 ├─────────────────────────────────────────────────────────────┤
 │                     SERVICE LAYER                           │
-│                  Python + FastAPI + SQLite                   │
+│                  Python + FastAPI + SQLite                  │
 │         (REST APIs, SSE streaming, file upload)             │
 ├─────────────────────────────────────────────────────────────┤
 │                       AI LAYER                              │
@@ -26,7 +26,7 @@ LawyerGPT is a **RAG-based (Retrieval-Augmented Generation) legal chatbot** that
 
 ---
 
-## Layer 1: Presentation Layer (Frontend)
+## Layer 1: Presentation Layer (`client/`)
 
 ### Tech Stack
 - **Framework:** React 18+ with TypeScript
@@ -38,7 +38,7 @@ LawyerGPT is a **RAG-based (Retrieval-Augmented Generation) legal chatbot** that
 ### Layout (ChatGPT-Inspired)
 - **Sidebar (left panel):**
   - New Chat button
-  - List of past conversations (title + timestamp), fetched from backend
+  - List of past conversations (title + timestamp), fetched from server
   - Each conversation is clickable to reload chat history
 - **Main Chat Area (center):**
   - Message thread (alternating user/assistant bubbles)
@@ -59,7 +59,7 @@ LawyerGPT is a **RAG-based (Retrieval-Augmented Generation) legal chatbot** that
 
 ### Directory Structure
 ```
-frontend/
+client/
 ├── public/
 ├── src/
 │   ├── components/
@@ -96,7 +96,7 @@ frontend/
 
 ---
 
-## Layer 2: Service Layer (Backend)
+## Layer 2: Service Layer (`server/`)
 
 ### Tech Stack
 - **Framework:** FastAPI
@@ -107,10 +107,10 @@ frontend/
 
 ### API Design (Production-Grade Separation)
 
-The backend follows a strict **Routes → Services → Data (Repository)** separation:
+The server follows a strict **Routes → Services → Data (Repository)** separation:
 
 ```
-backend/
+server/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                    # FastAPI app entry point, CORS, lifespan
@@ -201,7 +201,7 @@ backend/
 
 ---
 
-## Layer 3: AI Layer
+## Layer 3: AI Layer (`engine/`)
 
 ### Tech Stack
 - **Framework:** LangChain
@@ -213,7 +213,7 @@ backend/
 ### Directory Structure
 
 ```
-ai/
+engine/
 ├── __init__.py
 ├── config.py                      # AI-specific configuration constants
 ├── ingestion/                     # Data Ingestion Pipeline (ETL)
@@ -313,7 +313,7 @@ The system prompt instructs the LLM to:
 - Older messages are summarized using the LLM into a condensed summary
 - Recent messages (last N turns) are kept in full
 - Summary + recent messages are sent to the LLM
-- Threshold and recent-turn count are configurable in `ai/config.py`
+- Threshold and recent-turn count are configurable in `engine/config.py`
 
 ---
 
@@ -348,7 +348,7 @@ BATCH_SIZE=100
 ## Dependency Management
 
 - **Python:** UV (pyproject.toml)
-- **Frontend:** npm (package.json)
+- **Client:** npm (package.json)
 - **Python version:** 3.12
 
 ### Key Python Dependencies
@@ -396,14 +396,14 @@ LawyerGPT/
 ├── docs/
 │   ├── architecture.excalidraw    # High-level architecture diagram
 │   └── diagrams.md                # Mermaid diagrams (user flow, sequence)
-├── frontend/                      # Presentation Layer
-│   └── (see frontend structure above)
-├── backend/                       # Service Layer
+├── client/                        # Presentation Layer
+│   └── (see client structure above)
+├── server/                        # Service Layer
 │   ├── app/
-│   │   └── (see backend structure above)
+│   │   └── (see server structure above)
 │   └── logs/
-├── ai/                            # AI Layer
-│   └── (see AI structure above)
+├── engine/                        # AI Layer
+│   └── (see engine structure above)
 ├── chroma_db/                     # ChromaDB persistent storage (git-ignored)
 └── uploads/                       # Temporary PDF upload storage (git-ignored)
 ```
@@ -413,24 +413,24 @@ LawyerGPT/
 ## Development Commands
 
 ```bash
-# Backend
-cd backend && uv run uvicorn app.main:app --reload --port 8000
+# Server (Backend)
+cd server && uv run uvicorn app.main:app --reload --port 8000
 
-# Frontend
-cd frontend && npm install && npm run dev
+# Client (Frontend)
+cd client && npm install && npm run dev
 
 # Full stack (from root)
-# Terminal 1: Backend
-uv run uvicorn backend.app.main:app --reload --port 8000
-# Terminal 2: Frontend
-cd frontend && npm run dev
+# Terminal 1: Server
+uv run uvicorn server.app.main:app --reload --port 8000
+# Terminal 2: Client
+cd client && npm run dev
 ```
 
 ---
 
 ## Coding Standards
 
-### Python (Backend + AI)
+### Python (Server + Engine)
 - Follow PEP 8
 - Type hints on all function signatures
 - Async/await for all FastAPI route handlers and service methods
@@ -438,7 +438,7 @@ cd frontend && npm run dev
 - Custom exceptions with descriptive error codes
 - Docstrings only where the "why" is non-obvious
 
-### TypeScript (Frontend)
+### TypeScript (Client)
 - Strict TypeScript (no `any` unless unavoidable)
 - Functional components with hooks
 - Custom hooks for shared logic (useChat, useConversations, useFileUpload)
