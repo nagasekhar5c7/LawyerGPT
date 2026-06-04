@@ -49,13 +49,29 @@ LawyerGPT is a **RAG-based (Retrieval-Augmented Generation) legal chatbot** that
   - PDF upload button (triggers document ingestion)
 - **Header:**
   - App branding ("LawyerGPT")
+  - Model Selector dropdown (user picks which LLM to route queries to)
 
 ### Key Frontend Features
 - Token-by-token streaming via SSE (Server-Sent Events)
 - PDF upload with progress indicator
 - Source citation rendering (document name + page number displayed as clickable references)
 - Conversation management (create, switch, delete conversations)
+- Model selection dropdown (switch between LLMs per query)
 - Responsive design (desktop-first, mobile-friendly)
+
+### Model Selection
+Users can select which LLM to route their query to via a dropdown in the header. The selected model ID is sent with each chat request to the backend, which forwards it to the engine layer.
+
+**Available Models:**
+| Model ID | Display Name | Provider |
+|----------|-------------|----------|
+| `gpt-5.5` | GPT-5.5 (default) | OpenAI |
+| `gpt-4o` | GPT-4o | OpenAI |
+| `gpt-4o-mini` | GPT-4o Mini | OpenAI |
+| `claude-sonnet-4-6` | Claude Sonnet 4.6 | Anthropic |
+| `claude-haiku-4-5` | Claude Haiku 4.5 | Anthropic |
+
+Models are defined in `client/src/types/index.ts` (`AVAILABLE_MODELS` array) and can be extended by adding entries there. The backend `ChatRequest` schema accepts a `model` field and the engine's `generator.py` uses it to instantiate the correct LLM provider.
 
 ### Directory Structure
 ```
@@ -76,7 +92,8 @@ client/
 │   │   │   ├── ChatInput.tsx
 │   │   │   └── FileUpload.tsx
 │   │   └── Layout/
-│   │       └── AppLayout.tsx
+│   │       ├── AppLayout.tsx
+│   │       └── ModelSelector.tsx
 │   ├── hooks/
 │   │   ├── useChat.ts
 │   │   ├── useConversations.ts
@@ -153,7 +170,7 @@ server/
 | `GET` | `/api/v1/conversations` | List all conversations |
 | `GET` | `/api/v1/conversations/{id}` | Get conversation with messages |
 | `DELETE` | `/api/v1/conversations/{id}` | Delete a conversation |
-| `POST` | `/api/v1/chat/{conversation_id}` | Send a message, get SSE-streamed response |
+| `POST` | `/api/v1/chat/{conversation_id}` | Send a message + model selection, get SSE-streamed response |
 | `POST` | `/api/v1/documents/upload` | Upload and ingest a PDF document |
 | `GET` | `/api/v1/documents` | List ingested documents |
 
@@ -207,7 +224,7 @@ server/
 - **Framework:** LangChain
 - **Vector Store:** ChromaDB (persistent local storage)
 - **Embeddings Model:** OpenAI `text-embedding-3-large`
-- **LLM:** OpenAI `gpt-5.5` (via LangChain ChatOpenAI)
+- **LLM:** User-selectable — OpenAI (gpt-5.5, gpt-4o, gpt-4o-mini) or Anthropic (claude-sonnet-4-6, claude-haiku-4-5) via LangChain
 - **PDF Processing:** `PyPDFLoader` (LangChain) + fallback OCR via `pytesseract`
 
 ### Directory Structure
@@ -287,7 +304,10 @@ User Query → Retrieve → Augment → Generate (Stream) → Response with Cita
   - Summarizes older messages when conversation grows too long (using LLM summarization)
 
 #### Generate — `generator.py`
-- Sends augmented prompt to OpenAI `gpt-5.5` via LangChain `ChatOpenAI`
+- Receives the user-selected `model` ID from the chat request
+- Instantiates the correct LLM provider based on model ID:
+  - OpenAI models (`gpt-5.5`, `gpt-4o`, `gpt-4o-mini`) → LangChain `ChatOpenAI`
+  - Anthropic models (`claude-sonnet-4-6`, `claude-haiku-4-5`) → LangChain `ChatAnthropic`
 - **Streaming:** Uses LangChain's streaming callbacks to yield tokens as they arrive
 - Parses LLM response to extract structured citations
 - Returns: streamed tokens + final parsed citations (document name, page number)
@@ -323,6 +343,9 @@ The system prompt instructs the LLM to:
 # OpenAI
 OPENAI_API_KEY=sk-...
 
+# Anthropic (required for Claude models)
+ANTHROPIC_API_KEY=sk-ant-...
+
 # Application
 APP_ENV=development          # development | production
 LOG_LEVEL=INFO               # DEBUG | INFO | WARNING | ERROR
@@ -336,7 +359,7 @@ CHROMA_COLLECTION_NAME=legal_documents
 
 # AI Configuration
 EMBEDDING_MODEL=text-embedding-3-large
-LLM_MODEL=gpt-5.5
+DEFAULT_LLM_MODEL=gpt-5.5   # Fallback if client doesn't send model
 CHUNK_SIZE=2000
 CHUNK_OVERLAP=100
 RETRIEVAL_TOP_K=5
@@ -358,6 +381,7 @@ uvicorn[standard]
 sqlalchemy
 langchain
 langchain-openai
+langchain-anthropic
 langchain-community
 langchain-chroma
 chromadb
