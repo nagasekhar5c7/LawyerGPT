@@ -21,3 +21,4 @@ chroma_db/
 
 # Uploads
 uploads/
+.env
