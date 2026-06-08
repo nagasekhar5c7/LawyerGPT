@@ -5,6 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.app.data.repositories import conversation_repo, message_repo
 from server.app.exceptions import ConversationNotFoundError
 
+from engine.orchestration.retriever import retrieve
+from engine.orchestration.augmentor import augment
+from engine.orchestration.generator import generate_stream
+
 logger = logging.getLogger("lawyergpt.service.chat")
 
 
@@ -28,29 +32,52 @@ async def process_chat(
 
     await db.commit()
 
-    # Placeholder: yield a stub response until the engine layer is built
-    # The engine layer will plug in here with retriever → augmentor → generator
-    stub_response = (
-        f"Thank you for your legal question. You asked: \"{user_message}\"\n\n"
-        f"This response is a placeholder — the AI engine layer is not yet connected. "
-        f"Once the engine is built, this endpoint will:\n"
-        f"1. Retrieve relevant legal document chunks from ChromaDB\n"
-        f"2. Augment the prompt with context and conversation history\n"
-        f"3. Stream the response from the **{model}** model\n"
-        f"4. Return source citations\n\n"
-        f"*Model selected: {model}*"
-    )
+    try:
+        logger.info("Retrieving relevant chunks for query")
+        retrieved_chunks = retrieve(user_message)
+        logger.info("Retrieved %d chunk(s)", len(retrieved_chunks))
 
-    for word in stub_response.split(" "):
-        yield json.dumps({"type": "token", "data": word + " "})
+        history = []
+        messages = await message_repo.get_messages_by_conversation(db, conversation_id)
+        for msg in messages:
+            if msg.role in ("user", "assistant") and msg.content:
+                history.append({"role": msg.role, "content": msg.content})
+        # Exclude the last user message since it's already the current query
+        if history and history[-1]["role"] == "user":
+            history = history[:-1]
 
-    citations = [
-        {"document_name": "placeholder.pdf", "page_number": 1, "chunk_text": "Engine not connected yet"}
-    ]
-    yield json.dumps({"type": "citations", "data": json.dumps(citations)})
-    yield json.dumps({"type": "done", "data": ""})
+        logger.info("Building augmented prompt with %d history message(s)", len(history))
+        augmented_messages = augment(user_message, retrieved_chunks, history if history else None)
 
-    await message_repo.create_message(db, conversation_id, "assistant", stub_response, citations)
-    await db.commit()
+        logger.info("Streaming LLM response with model=%s", model)
+        full_response = ""
+        for token in generate_stream(augmented_messages, model):
+            full_response += token
+            yield json.dumps({"type": "token", "data": token})
 
-    logger.info("Chat response completed conv=%s model=%s", conversation_id, model)
+        citations = []
+        for chunk in retrieved_chunks:
+            citations.append({
+                "document_name": chunk["metadata"].get("filename", "unknown"),
+                "page_number": chunk["metadata"].get("page_number", 0),
+                "chunk_text": chunk["content"][:200],
+            })
+
+        yield json.dumps({"type": "citations", "data": json.dumps(citations)})
+        yield json.dumps({"type": "done", "data": ""})
+
+        await message_repo.create_message(
+            db, conversation_id, "assistant", full_response, citations
+        )
+        await db.commit()
+
+        logger.info("Chat response completed conv=%s model=%s chars=%d", conversation_id, model, len(full_response))
+
+    except Exception as e:
+        logger.error("Chat processing failed: %s", str(e))
+        error_msg = f"An error occurred while processing your question: {str(e)}"
+        yield json.dumps({"type": "token", "data": error_msg})
+        yield json.dumps({"type": "done", "data": ""})
+
+        await message_repo.create_message(db, conversation_id, "assistant", error_msg, [])
+        await db.commit()

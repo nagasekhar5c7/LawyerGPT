@@ -1,11 +1,15 @@
 import logging
-import os
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import UploadFile
 from server.app.config import settings
 from server.app.data.models import Document
 from server.app.exceptions import DocumentProcessingError
+
+from engine.ingestion.loader import load_pdf
+from engine.ingestion.chunker import chunk_documents
+from engine.ingestion.embedder import embed_documents
+from engine.ingestion.store import store_embeddings
 
 logger = logging.getLogger("lawyergpt.service.document")
 
@@ -37,13 +41,36 @@ async def upload_and_ingest(db: AsyncSession, file: UploadFile) -> Document:
     db.add(document)
     await db.flush()
 
-    # Placeholder: the engine ingestion pipeline will process the PDF here
-    # For now, mark as completed with 0 chunks
-    document.status = "completed"
-    document.total_chunks = 0
-    await db.flush()
+    try:
+        logger.info("Starting ingestion pipeline for %s", file.filename)
 
-    logger.info("Document ingested id=%s filename=%s status=%s", document.id, file.filename, document.status)
+        pages = load_pdf(str(file_path))
+        logger.info("Extracted %d page(s)", len(pages))
+
+        chunks = chunk_documents(pages)
+        logger.info("Created %d chunk(s)", len(chunks))
+
+        embedded = embed_documents(chunks)
+        logger.info("Generated %d embedding(s)", len(embedded))
+
+        stored = store_embeddings(embedded)
+        logger.info("Stored %d vector(s) in ChromaDB", stored)
+
+        document.status = "completed"
+        document.total_chunks = stored
+        await db.flush()
+
+        logger.info(
+            "Ingestion complete id=%s filename=%s chunks=%d",
+            document.id, file.filename, stored,
+        )
+
+    except Exception as e:
+        logger.error("Ingestion failed for %s: %s", file.filename, str(e))
+        document.status = "failed"
+        await db.flush()
+        raise DocumentProcessingError(f"Ingestion failed: {str(e)}")
+
     return document
 
 
