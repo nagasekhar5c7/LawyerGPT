@@ -428,6 +428,9 @@ LawyerGPT/
 │   └── logs/
 ├── engine/                        # AI Layer
 │   └── (see engine structure above)
+├── skills/                        # Claude Code custom skills
+│   └── caveman/
+│       └── SKILL.md               # Token optimization skill (caveman mode)
 ├── chroma_db/                     # ChromaDB persistent storage (git-ignored)
 └── uploads/                       # Temporary PDF upload storage (git-ignored)
 ```
@@ -473,6 +476,28 @@ cd client && npm run dev
 - Versioned endpoints (`/api/v1/`)
 - Pydantic schemas for all request/response validation
 - Consistent error response format
+
+---
+
+## Skills
+
+### Caveman — Token Optimization Skill (`skills/caveman/SKILL.md`)
+
+- **Name:** `caveman`
+- **Description:** Ultra-compressed communication mode that cuts token usage by ~75% while preserving full technical accuracy. Speaks in terse, caveman-style prose — dropping articles, filler, hedging, and pleasantries — but keeps all technical terms, code blocks, and error strings exact.
+- **Intensity Levels:** `lite` | `full` (default) | `ultra` | `wenyan-lite` | `wenyan-full` | `wenyan-ultra`
+
+**When to auto-invoke:** Use `/caveman` or trigger automatically whenever:
+- User says "caveman mode", "talk like caveman", "use caveman", "less tokens", or "be brief"
+- Token efficiency or cost reduction is requested
+- Long-running sessions where minimizing output tokens matters
+
+**When to drop caveman temporarily:**
+- Security warnings and irreversible action confirmations
+- Multi-step sequences where fragments could be misread
+- When the user asks for clarification
+
+**Boundaries:** Code, commits, and PR descriptions are always written in normal prose. Deactivate with "stop caveman" or "normal mode".
 
 ---
 
