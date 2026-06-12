@@ -20,5 +20,4 @@ node_modules
 chroma_db/
 
 # Uploads
-uploads/
 .env
