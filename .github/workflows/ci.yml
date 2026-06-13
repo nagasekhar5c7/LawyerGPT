@@ -95,7 +95,8 @@ jobs:
         run: uv sync
 
       - name: Verify app imports and starts
-        run: uv run python -c "from server.app.main import app; print(f'FastAPI app loaded: {app.title} v{app.version}')"
+        run: |
+          uv run python -c "from server.app.main import app; print('FastAPI app loaded:', app.title, 'v' + app.version)"
         env:
           OPENAI_API_KEY: "sk-test-dummy-key-for-ci"
           ANTHROPIC_API_KEY: "sk-ant-test-dummy-key-for-ci"
