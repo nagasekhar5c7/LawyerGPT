@@ -75,6 +75,31 @@ jobs:
           name: frontend-test-results
           path: test-results/frontend-results.xml
 
+  backend-build:
+    name: Backend Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Verify app imports and starts
+        run: uv run python -c "from server.app.main import app; print(f'FastAPI app loaded: {app.title} v{app.version}')"
+        env:
+          OPENAI_API_KEY: "sk-test-dummy-key-for-ci"
+          ANTHROPIC_API_KEY: "sk-ant-test-dummy-key-for-ci"
+
   frontend-build:
     name: Frontend Build
     runs-on: ubuntu-latest
