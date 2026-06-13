@@ -1,0 +1,32 @@
+# Dependencies
+client/node_modules
+.venv
+__pycache__
+
+# Build outputs
+client/dist
+
+# Data stores (mounted as volumes in production)
+chroma_db
+uploads
+*.db
+
+# Environment & secrets
+.env
+.env.*
+
+# IDE & OS
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Git
+.git
+.gitignore
+
+# Docs & non-runtime files
+docs
+*.md
+!README.md
+skills

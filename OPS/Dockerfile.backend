@@ -1,0 +1,73 @@
+# ============================================================================
+# LawyerGPT — Backend Dockerfile (Production)
+# Multi-stage build: install deps via UV → slim runtime image
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# Stage 1: Dependencies — install with UV in a full image
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+
+RUN uv sync --frozen --no-dev --no-install-project
+
+COPY server/ server/
+COPY engine/ engine/
+COPY main.py ./
+
+RUN uv sync --frozen --no-dev
+
+# ---------------------------------------------------------------------------
+# Stage 2: Production — minimal runtime
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS production
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    APP_ENV=production \
+    LOG_LEVEL=INFO \
+    PATH="/app/.venv/bin:$PATH"
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        curl \
+ && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 1001 appgroup \
+ && useradd  --uid 1001 --gid appgroup --shell /bin/false appuser
+
+WORKDIR /app
+
+COPY --from=builder --chown=appuser:appgroup /app/.venv .venv
+COPY --from=builder --chown=appuser:appgroup /app/server server
+COPY --from=builder --chown=appuser:appgroup /app/engine engine
+COPY --from=builder --chown=appuser:appgroup /app/main.py main.py
+COPY --from=builder --chown=appuser:appgroup /app/pyproject.toml pyproject.toml
+
+RUN mkdir -p /app/uploads /app/chroma_db /app/server/logs \
+ && chown -R appuser:appgroup /app/uploads /app/chroma_db /app/server/logs
+
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+CMD ["uvicorn", "server.app.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--workers", "4", \
+     "--proxy-headers", \
+     "--forwarded-allow-ips", "*", \
+     "--access-log"]
